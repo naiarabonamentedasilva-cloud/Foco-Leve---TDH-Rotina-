@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocoLeve • Assistente TDAH por Voz</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tone.js para feedback sonoro suave -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        calm: {
+                            bgDark: '#0b0f19',
+                            cardDark: '#131b2e',
+                            borderDark: '#1e293b',
+                            bgLight: '#f8fafc',
+                            cardLight: '#ffffff',
+                            borderLight: '#e2e8f0',
+                            sage: '#10b981',
+                            indigo: '#6366f1',
+                            lavender: '#818cf8',
+                            mint: '#34d399'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.22); opacity: 0.2; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .listening-ring {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.5s linear, stroke 0.3s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.25);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.45);
+        }
+        .confetti-piece {
+            position: fixed;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            pointer-events: none;
+            z-index: 100;
+            animation: fall 1.5s ease-out forwards;
+        }
+        @keyframes fall {
+            0% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translateY(160px) rotate(360deg) scale(0.4); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-calm-bgLight dark:bg-calm-bgDark text-slate-800 dark:text-slate-100 min-h-screen transition-colors duration-300 antialiased selection:bg-indigo-500/30">
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Header Elegante -->
+    <header class="sticky top-0 z-30 backdrop-blur-xl bg-white/75 dark:bg-slate-950/75 border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-lg tracking-tight leading-none bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">FocoLeve</h1>
+                        <span id="license-badge-header" class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
+                            <i data-lucide="clock" class="w-3 h-3"></i> <span id="trial-time-badge">24h de Teste</span>
+                        </span>
+                    </div>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">Um micro-passo de cada vez</span>
+                </div>
+            </div>
+
+            <!-- Progresso Diário -->
+            <div class="hidden md:flex items-center gap-3 bg-slate-100/80 dark:bg-slate-900/80 px-4 py-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Progresso:</span>
+                <div class="w-28 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div id="daily-progress-bar" class="h-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-500 rounded-full" style="width: 0%"></div>
+                </div>
+                <span id="daily-progress-text" class="text-xs font-bold text-slate-700 dark:text-slate-200">0%</span>
+            </div>
+
+            <!-- Ações Header -->
+            <div class="flex items-center gap-2">
+                <button onclick="openLicenseModal()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 text-xs font-semibold transition shadow-xs" title="Ver Licença Vitalícia">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline" id="license-btn-text">Ativar Vitalício</span>
+                </button>
+                <button id="toggle-sound-btn" onclick="toggleSound()" title="Sons" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition">
+                    <i id="sound-icon" data-lucide="volume-2" class="w-4 h-4"></i>
+                </button>
+                <button id="toggle-theme-btn" onclick="toggleTheme()" title="Tema" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition">
+                    <i id="theme-icon" data-lucide="sun" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Modal de Licença / Paywall (Após 1 dia de teste) -->
+    <div id="license-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-16 -right-16 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <i data-lucide="award" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg text-slate-900 dark:text-white" id="modal-title">Licença Vitalícia FocoLeve</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400" id="modal-subtitle">Acesso completo sem mensalidades</p>
+                    </div>
+                </div>
+                <button onclick="closeLicenseModal()" class="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div id="modal-body-content" class="space-y-4">
+                <!-- Conteúdo dinâmico -->
+            </div>
+
+            <div class="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
+                <a
+                    href="https://mpago.la/1phPxRh"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-[#009ee3] hover:bg-[#0089c7] text-white font-semibold text-sm shadow-lg shadow-sky-500/25 transition"
+                >
+                    <i data-lucide="lock" class="w-4 h-4"></i>
+                    <span>Comprar Licença Vitalícia (R$ 29,90)</span>
+                    <i data-lucide="external-link" class="w-4 h-4 opacity-75"></i>
+                </a>
+                <button onclick="simulateSuccessfulPayment()" class="px-4 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition flex items-center justify-center gap-1.5" title="Se você já realizou o pagamento, clique aqui para desbloquear">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>Já paguei / Ativar</span>
+                </button>
+            </div>
+            <div class="mt-3 text-center">
+                <span class="text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i> Pagamento único e 100% seguro pelo Mercado Pago. Criptografia ponta a ponta.
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+
+        <!-- 1. CENTRAL DE COMANDO DE VOZ (Ativo no Teste Grátis de 1 Dia) -->
+        <section class="bg-white dark:bg-slate-900/90 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="flex flex-col items-center text-center relative z-10">
+                <!-- Botão de Microfone Central -->
+                <div class="relative mb-5">
+                    <div id="mic-pulse" class="hidden absolute inset-0 rounded-full bg-indigo-500 listening-ring"></div>
+                    <button id="mic-btn" onclick="toggleVoiceRecognition()" aria-label="Ativar comando de voz" class="relative z-10 w-24 h-24 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 active:scale-95 text-white flex items-center justify-center shadow-xl shadow-indigo-500/30 transition-all duration-200">
+                        <i id="mic-icon" data-lucide="mic" class="w-10 h-10"></i>
+                    </button>
+                </div>
+
+                <h2 id="voice-status-title" class="text-base sm:text-lg font-semibold text-slate-800 dark:text-slate-100">
+                    Toque no microfone e fale naturalmente
+                </h2>
+                <p id="voice-transcript" class="text-sm text-slate-500 dark:text-slate-400 mt-1 min-h-[24px] max-w-xl italic">
+                    Ex: "Adicionar tarefa comprar pão" ou "Iniciar foco"
+                </p>
+
+                <!-- Aviso de suporte de voz -->
+                <div id="speech-fallback-banner" class="hidden mt-3 px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
+                    Microfone indisponível ou bloqueado. Use a barra de texto ou os comandos rápidos abaixo!
+                </div>
+
+                <!-- Entrada por Texto Alternativa -->
+                <form onsubmit="handleTextCommand(event)" class="w-full max-w-2xl mt-5 flex gap-2">
+                    <input
+                        id="quick-input"
+                        type="text"
+                        placeholder="Ou digite uma tarefa aqui (ex: 'Pagar conta de luz')..."
+                        class="flex-1 px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                    >
+                    <button type="submit" class="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm flex items-center gap-2 transition shrink-0 shadow-md shadow-indigo-500/20">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Adicionar</span>
+                    </button>
+                </form>
+
+                <!-- Chips Rápidos -->
+                <div class="mt-4 flex flex-wrap justify-center gap-2">
+                    <button onclick="simulateVoiceCommand('Adicionar tarefa estudar programação')" class="text-xs px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition">
+                        🎙️ "Adicionar tarefa estudar..."
+                    </button>
+                    <button onclick="simulateVoiceCommand('Quebrar tarefa limpar quarto')" class="text-xs px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition">
+                        🧩 "Quebrar tarefa limpar quarto"
+                    </button>
+                    <button onclick="simulateVoiceCommand('Iniciar foco')" class="text-xs px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition">
+                        ⏱️ "Iniciar foco"
+                    </button>
+                    <button onclick="simulateVoiceCommand('Ler minhas tarefas')" class="text-xs px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition">
+                        🔊 "Ler minhas tarefas"
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. GRID PRINCIPAL (Foco Único, Timer & Lista de Tarefas + Brain Dump) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Coluna Esquerda (7 colunas): Foco Único e Lista -->
+            <div class="lg:col-span-7 space-y-6">
+
+                <!-- Cartão Foco Único ("AGORA") -->
+                <section class="bg-gradient-to-br from-indigo-500/10 via-white to-teal-500/10 dark:from-indigo-950/40 dark:via-slate-900 dark:to-teal-950/20 rounded-3xl p-6 border-2 border-indigo-500/30 shadow-xs">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">
+                            <i data-lucide="target" class="w-3.5 h-3.5"></i> Foco Único • Agora
+                        </span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Só importa isso agora</span>
+                    </div>
+
+                    <div id="now-focus-container">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </section>
+
+                <!-- Lista de Tarefas -->
+                <section class="bg-white dark:bg-slate-900/90 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-base text-slate-800 dark:text-white flex items-center gap-2">
+                            <i data-lucide="list-checks" class="w-5 h-5 text-indigo-500"></i> Suas Tarefas
+                        </h3>
+                        <span id="tasks-counter" class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">0 pendentes</span>
+                    </div>
+
+                    <div id="tasks-list" class="space-y-3">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- Coluna Direita (5 colunas): Timer Visual e Despejo Mental -->
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- Timer Visual (Anti-Cegueira Temporal) -->
+                <section class="bg-white dark:bg-slate-900/90 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
+                    <div class="flex items-center justify-between w-full mb-3">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-500/15 text-teal-600 dark:text-teal-400">
+                            <i data-lucide="clock" class="w-3.5 h-3.5"></i> <span id="timer-mode-badge">Foco 15m</span>
+                        </span>
+                        <span id="timer-subtext" class="text-xs text-slate-500 dark:text-slate-400">Pronto para começar</span>
+                    </div>
+
+                    <!-- Relógio Circular SVG -->
+                    <div class="relative w-44 h-44 my-3 flex items-center justify-center">
+                        <svg class="w-full h-full" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" class="text-slate-100 dark:text-slate-800" stroke-width="8"></circle>
+                            <circle id="timer-ring" cx="60" cy="60" r="52" fill="none" stroke="currentColor" class="text-indigo-500 progress-ring__circle" stroke-width="8" stroke-dasharray="326.72" stroke-dashoffset="0" stroke-linecap="round"></circle>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="timer-display" class="text-3xl font-black tracking-tight text-slate-800 dark:text-white">15:00</span>
+                            <span class="text-[10px] text-slate-400 uppercase tracking-wider font-medium mt-0.5">Restantes</span>
+                        </div>
+                    </div>
+
+                    <!-- Controles Timer -->
+                    <div class="flex items-center gap-2 w-full mt-2">
+                        <button onclick="toggleTimer()" class="flex-1 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold text-sm flex items-center justify-center gap-2 transition shadow-md shadow-indigo-500/20">
+                            <i id="timer-play-icon" data-lucide="play" class="w-4 h-4"></i>
+                            <span id="timer-btn-label">Iniciar</span>
+                        </button>
+                        <button onclick="resetTimer()" class="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition" title="Reiniciar">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- Atalhos de Tempo -->
+                    <div class="grid grid-cols-3 gap-2 w-full mt-3">
+                        <button onclick="setTimerPreset(15, 'Foco 15m')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 text-xs font-medium text-slate-600 dark:text-slate-300 transition">15m</button>
+                        <button onclick="setTimerPreset(25, 'Foco 25m')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 text-xs font-medium text-slate-600 dark:text-slate-300 transition">25m</button>
+                        <button onclick="setTimerPreset(5, 'Pausa 5m')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-teal-500/15 text-xs font-medium text-slate-600 dark:text-slate-300 transition">Pausa 5m</button>
+                    </div>
+                </section>
+
+                <!-- Despejo Mental (Brain Dump) -->
+                <section class="bg-white dark:bg-slate-900/90 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-base text-slate-800 dark:text-white flex items-center gap-2">
+                            <i data-lucide="brain" class="w-5 h-5 text-amber-500"></i> Despejo Mental
+                        </h3>
+                        <span class="text-[11px] text-slate-400">Estacione pensamentos</span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Teve uma ideia aleatória enquanto focava? Anote aqui para não esquecer sem perder o foco atual.
+                    </p>
+
+                    <form onsubmit="addBrainDump(event)" class="flex gap-2">
+                        <input
+                            id="brain-dump-input"
+                            type="text"
+                            placeholder="Ideia ou pensamento rápido..."
+                            class="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
+                        >
+                        <button type="submit" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs transition shrink-0">
+                            Anotar
+                        </button>
+                    </form>
+
+                    <div id="brain-dump-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </section>
+
+            </div>
+
+        </div>
+
+        <!-- 3. SEÇÃO DE APOIO E COMPRA DA LICENÇA VITALÍCIA -->
+        <section class="bg-gradient-to-r from-indigo-500/10 via-white to-teal-500/10 dark:from-indigo-950/40 dark:via-slate-900 dark:to-teal-950/20 rounded-3xl p-6 sm:p-8 border-2 border-indigo-500/30 shadow-xs">
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div class="space-y-2 max-w-2xl">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                            <i data-lucide="award" class="w-3.5 h-3.5"></i> Versão Definitiva
+                        </span>
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Pagamento Único • Mercado Pago
+                        </span>
+                    </div>
+
+                    <h3 class="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
+                        Tenha acesso vitalício e ilimitado ao FocoLeve
+                    </h3>
+                    <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Após o seu teste gratuito de 1 dia, adquira sua <strong>Licença Vitalícia com pagamento único</strong> de R$ 29,90. Sem mensalidades, sem renovações. Processamento 100% seguro pelo ambiente criptografado oficial do <strong>Mercado Pago</strong>.
+                    </p>
+                </div>
+
+                <div class="w-full md:w-auto flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+                    <a
+                        href="https://mpago.la/1phPxRh"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-[#009ee3] hover:bg-[#0089c7] active:scale-95 text-white font-semibold text-sm shadow-lg shadow-sky-500/20 transition-all"
+                    >
+                        <i data-lucide="lock" class="w-4 h-4"></i>
+                        <span>Comprar Licença Vitalícia</span>
+                        <i data-lucide="external-link" class="w-4 h-4 opacity-85"></i>
+                    </a>
+                    <button onclick="simulateSuccessfulPayment()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium text-center sm:text-right w-full">
+                        Já realizou o pagamento? Ativar acesso agora
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // =========================================================================
+        // ESTADO GLOBAL E LICENCIAMENTO (1 DIA DE TESTE GRATUITO COM VOZ ATIVA)
+        // =========================================================================
+        const STORAGE_KEY = 'focoleve_tdah_app_v3';
+
+        let appState = {
+            tasks: [
+                {
+                    id: 't1',
+                    title: 'Beber um copo de água fresca agora',
+                    completed: false,
+                    isFocus: true,
+                    subtasks: []
+                },
+                {
+                    id: 't2',
+                    title: 'Organizar a mesa de trabalho',
+                    completed: false,
+                    isFocus: false,
+                    subtasks: [
+                        { id: 's1', title: 'Recolher papéis e lixo visíveis', completed: false },
+                        { id: 's2', title: 'Levar copos para a cozinha', completed: false },
+                        { id: 's3', title: 'Deixar apenas o essencial', completed: false }
+                    ]
+                }
+            ],
+            brainDumps: [
+                { id: 'b1', text: 'Pesquisar receita rápida para o jantar' }
+            ],
+            soundEnabled: true,
+            darkMode: true,
+            license: {
+                isActivated: false,
+                trialStartTime: Date.now(),
+                trialDurationHours: 24 // Exatamente 1 dia (24 horas)
+            }
+        };
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    appState = { ...appState, ...JSON.parse(saved) };
+                    if (!appState.license) {
+                        appState.license = { isActivated: false, trialStartTime: Date.now(), trialDurationHours: 24 };
+                    }
+                }
+            } catch (e) {
+                console.error('Erro ao carregar dados:', e);
+            }
+            applyTheme();
+            updateSoundIcon();
+            checkTrialStatus();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.error('Erro ao salvar dados:', e);
+            }
+            renderAll();
+        }
+
+        // Verificação de Teste de 1 Dia (24h) com Microfone Totalmente Ativo
+        function checkTrialStatus() {
+            if (appState.license.isActivated) return true;
+
+            const now = Date.now();
+            const elapsedHours = (now - appState.license.trialStartTime) / (1000 * 60 * 60);
+
+            if (elapsedHours > appState.license.trialDurationHours) {
+                showPaywallModal();
+                return false;
+            }
+            return true;
+        }
+
+        function getRemainingTrialTime() {
+            if (appState.license.isActivated) return 'Vitalícia';
+            const now = Date.now();
+            const elapsedMs = now - appState.license.trialStartTime;
+            const totalMs = appState.license.trialDurationHours * 60 * 60 * 1000;
+            const remainingMs = totalMs - elapsedMs;
+
+            if (remainingMs <= 0) return 'Expirado';
+
+            const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+            const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+            if (hours > 0) {
+                return `${hours}h ${minutes}m de Teste`;
+            }
+            return `${minutes}m de Teste`;
+        }
+
+        function openLicenseModal() {
+            const modal = document.getElementById('license-modal');
+            const body = document.getElementById('modal-body-content');
+            const isActivated = appState.license.isActivated;
+            const remainingStr = getRemainingTrialTime();
+
+            if (isActivated) {
+                document.getElementById('modal-title').textContent = 'Licença Vitalícia Ativada';
+                document.getElementById('modal-subtitle').textContent = 'Acesso ilimitado liberado';
+                body.innerHTML = `
+                    <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-3">
+                        <i data-lucide="check-circle-2" class="w-6 h-6 shrink-0"></i>
+                        <div>
+                            <p class="font-semibold">Parabéns! Seu FocoLeve está totalmente desbloqueado.</p>
+                            <p class="text-xs opacity-85 mt-0.5">Sem mensalidades ou assinaturas. Aproveite todas as ferramentas à vontade.</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('modal-title').textContent = 'Período de Teste Gratuito';
+                document.getElementById('modal-subtitle').textContent = `Tempo restante: ${remainingStr}`;
+                body.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs sm:text-sm">
+                            <p class="font-semibold mb-1">🎙️ O microfone e todos os recursos estão ativos neste teste de 1 dia.</p>
+                            <p class="opacity-90">Para garantir acesso permanente e sem interrupções após o teste, adquira sua <strong>Licença Vitalícia (Pagamento Único)</strong> por R$ 29,90.</p>
+                        </div>
+                        <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 pl-2">
+                            <li>✨ Comandos de voz em português ilimitados</li>
+                            <li>🧩 Quebra automática de tarefas em micro-passos</li>
+                            <li>⏱️ Timer visual anti-cegueira temporal com Tone.js</li>
+                            <li>🧠 Despejo mental e salvamento de dados</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeLicenseModal() {
+            document.getElementById('license-modal').classList.add('hidden');
+        }
+
+        function showPaywallModal() {
+            openLicenseModal();
+        }
+
+        function simulateSuccessfulPayment() {
+            appState.license.isActivated = true;
+            saveState();
+            closeLicenseModal();
+            showToast('🎉 Licença Vitalícia ativada com sucesso! Obrigado!', 'success');
+            playGentleChime('complete');
+            triggerSubtleConfetti();
+        }
+
+        function guardAction(actionCallback) {
+            if (!checkTrialStatus()) {
+                showPaywallModal();
+                return;
+            }
+            actionCallback();
+        }
+
+        // =========================================================================
+        // FEEDBACK SONORO & VISUAL (TONE.JS + CONFETE)
+        // =========================================================================
+        function playGentleChime(type = 'complete') {
+            if (!appState.soundEnabled || typeof Tone === 'undefined') return;
+            try {
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                const synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.02, decay: 0.2, sustain: 0.1, release: 0.8 }
+                }).toDestination();
+                synth.volume.value = -10;
+
+                if (type === 'complete') {
+                    synth.triggerAttackRelease(['C5', 'E5', 'G5'], '8n');
+                } else if (type === 'timer') {
+                    synth.triggerAttackRelease(['E5', 'B5'], '4n');
+                } else {
+                    synth.triggerAttackRelease(['G4', 'C5'], '16n');
+                }
+            } catch (e) {
+                // Ignora se áudio bloqueado por políticas do browser
+            }
+        }
+
+        function triggerSubtleConfetti() {
+            const colors = ['#6366f1', '#10b981', '#38bdf8', '#f59e0b'];
+            for (let i = 0; i < 24; i++) {
+                const piece = document.createElement('div');
+                piece.className = 'confetti-piece';
+                piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                piece.style.left = (35 + Math.random() * 30) + 'vw';
+                piece.style.top = (25 + Math.random() * 15) + 'vh';
+                piece.style.animationDelay = (Math.random() * 0.25) + 's';
+                document.body.appendChild(piece);
+                setTimeout(() => piece.remove(), 1600);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const styles = {
+                success: 'bg-emerald-600 text-white border-emerald-500',
+                info: 'bg-slate-900 text-white border-slate-700',
+                warn: 'bg-amber-600 text-white border-amber-500'
+            };
+
+            toast.className = `pointer-events-auto px-4 py-3 rounded-2xl shadow-xl border text-sm font-medium flex items-center justify-between gap-3 transition-all duration-300 transform translate-y-0 opacity-100 ${styles[type] || styles.info}`;
+            toast.innerHTML = `<span>${message}</span>`;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // =========================================================================
+        // QUEBRA INTELIGENTE DE TAREFAS (MICRO-PASSOS)
+        // =========================================================================
+        const SMART_BREAKDOWNS = {
+            'quarto': [
+                'Pegar um saco de lixo e recolher papéis e detritos',
+                'Juntar roupas espalhadas e colocar no cesto',
+                'Arrumar o lençol e travesseiros',
+                'Guardar 5 objetos fora do lugar'
+            ],
+            'limpar': [
+                'Colocar uma música animada de 3 minutos',
+                'Recolher lixo e louças visíveis',
+                'Passar pano rápido na superfície principal',
+                'Guardar itens soltos em uma caixa organizadora'
+            ],
+            'estudar': [
+                'Abrir o material ou caderno na página exata',
+                'Colocar garrafa de água ao lado e silenciar notificações',
+                'Ler ou revisar por apenas 10 minutos',
+                'Anotar os 3 pontos mais importantes'
+            ],
+            'trabalhar': [
+                'Abrir apenas a aba necessária para começar',
+                'Definir a entrega menor dos próximos 15 minutos',
+                'Fazer um rascunho sem buscar perfeição',
+                'Revisar e enviar'
+            ],
+            'louça': [
+                'Esvaziar a pia e agrupar pratos por tamanho',
+                'Ensaboar copos e talheres primeiro',
+                'Lavar pratos e panelas',
+                'Enxaguar tudo de uma vez'
+            ]
+        };
+
+        function generateMicroSteps(taskTitle) {
+            const lower = taskTitle.toLowerCase();
+            for (const [keyword, steps] of Object.entries(SMART_BREAKDOWNS)) {
+                if (lower.includes(keyword)) {
+                    return steps.map((s, idx) => ({
+                        id: 'sub_' + Date.now() + '_' + idx,
+                        title: s,
+                        completed: false
+                    }));
+                }
+            }
+            return [
+                { id: 'sub_' + Date.now() + '_1', title: `Preparar o ambiente para: ${taskTitle}`, completed: false },
+                { id: 'sub_' + Date.now() + '_2', title: 'Fazer os primeiros 5 minutos (só começar!)', completed: false },
+                { id: 'sub_' + Date.now() + '_3', title: 'Concluir o básico e comemorar', completed: false }
+            ];
+        }
+
+        // =========================================================================
+        // GERENCIAMENTO DE TAREFAS & FOCO ÚNICO
+        // =========================================================================
+        function addTask(title, autoBreakdown = false) {
+            guardAction(() => {
+                const cleanTitle = title.trim();
+                if (!cleanTitle) return;
+
+                const hasActiveFocus = appState.tasks.some(t => !t.completed && t.isFocus);
+                const newTask = {
+                    id: 'task_' + Date.now(),
+                    title: cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1),
+                    completed: false,
+                    isFocus: !hasActiveFocus,
+                    subtasks: autoBreakdown ? generateMicroSteps(cleanTitle) : []
+                };
+
+                appState.tasks.unshift(newTask);
+                playGentleChime('action');
+                showToast(`✅ Tarefa adicionada: "${newTask.title}"`, 'success');
+                saveState();
+            });
+        }
+
+        function breakDownTask(taskId) {
+            guardAction(() => {
+                const task = appState.tasks.find(t => t.id === taskId);
+                if (!task) return;
+
+                task.subtasks = generateMicroSteps(task.title);
+                playGentleChime('action');
+                showToast('🧩 Tarefa dividida em micro-passos fáceis!', 'success');
+                saveState();
+            });
+        }
+
+        function toggleTaskComplete(taskId) {
+            const task = appState.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            task.completed = !task.completed;
+            if (task.completed) {
+                playGentleChime('complete');
+                triggerSubtleConfetti();
+                showToast('🎉 Muito bem! Mais um passo concluído.', 'success');
+
+                if (task.isFocus) {
+                    task.isFocus = false;
+                    const nextPending = appState.tasks.find(t => !t.completed && t.id !== taskId);
+                    if (nextPending) nextPending.isFocus = true;
+                }
+            }
+            saveState();
+        }
+
+        function toggleSubtaskComplete(taskId, subId) {
+            const task = appState.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            const sub = task.subtasks.find(s => s.id === subId);
+            if (!sub) return;
+
+            sub.completed = !sub.completed;
+            if (sub.completed) {
+                playGentleChime('action');
+            }
+            saveState();
+        }
+
+        function addManualSubtask(taskId, inputEl) {
+            const val = inputEl.value.trim();
+            if (!val) return;
+            const task = appState.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            task.subtasks.push({
+                id: 'sub_' + Date.now(),
+                title: val,
+                completed: false
+            });
+            inputEl.value = '';
+            saveState();
+        }
+
+        function setAsFocus(taskId) {
+            appState.tasks.forEach(t => {
+                t.isFocus = (t.id === taskId);
+            });
+            playGentleChime('action');
+            showToast('🎯 Definida como seu Foco Único agora!', 'info');
+            saveState();
+        }
+
+        function deleteTask(taskId) {
+            appState.tasks = appState.tasks.filter(t => t.id !== taskId);
+            saveState();
+        }
+
+        // =========================================================================
+        // DESPEJO MENTAL (BRAIN DUMP)
+        // =========================================================================
+        function addBrainDump(e) {
+            e.preventDefault();
+            guardAction(() => {
+                const input = document.getElementById('brain-dump-input');
+                const text = input.value.trim();
+                if (!text) return;
+
+                appState.brainDumps.unshift({
+                    id: 'bd_' + Date.now(),
+                    text
+                });
+                input.value = '';
+                playGentleChime('action');
+                showToast('🧠 Ideia estacionada com segurança!', 'info');
+                saveState();
+            });
+        }
+
+        function promoteBrainDumpToTask(id) {
+            const item = appState.brainDumps.find(b => b.id === id);
+            if (!item) return;
+            addTask(item.text);
+            appState.brainDumps = appState.brainDumps.filter(b => b.id !== id);
+            saveState();
+        }
+
+        function deleteBrainDump(id) {
+            appState.brainDumps = appState.brainDumps.filter(b => b.id !== id);
+            saveState();
+        }
+
+        // =========================================================================
+        // TIMER DE FOCO VISUAL
+        // =========================================================================
+        let timerTotalSeconds = 15 * 60;
+        let timerRemainingSeconds = 15 * 60;
+        let timerInterval = null;
+        let isTimerRunning = false;
+        const RING_CIRCUMFERENCE = 2 * Math.PI * 52;
+
+        function updateTimerVisuals() {
+            const mins = Math.floor(timerRemainingSeconds / 60);
+            const secs = timerRemainingSeconds % 60;
+            document.getElementById('timer-display').textContent =
+                `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+            const ring = document.getElementById('timer-ring');
+            const fraction = timerRemainingSeconds / timerTotalSeconds;
+            const offset = RING_CIRCUMFERENCE * (1 - fraction);
+            ring.style.strokeDashoffset = offset;
+
+            if (fraction <= 0.2 && isTimerRunning) {
+                ring.classList.remove('text-indigo-500');
+                ring.classList.add('text-amber-500');
+            } else {
+                ring.classList.remove('text-amber-500');
+                ring.classList.add('text-indigo-500');
+            }
+        }
+
+        function toggleTimer() {
+            if (isTimerRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        }
+
+        function startTimer() {
+            if (isTimerRunning) return;
+            isTimerRunning = true;
+            document.getElementById('timer-btn-label').textContent = 'Pausar';
+            document.getElementById('timer-subtext').textContent = 'Tempo correndo...';
+            document.getElementById('timer-play-icon').setAttribute('data-lucide', 'pause');
+            lucide.createIcons();
+
+            timerInterval = setInterval(() => {
+                if (timerRemainingSeconds > 0) {
+                    timerRemainingSeconds--;
+                    updateTimerVisuals();
+                } else {
+                    pauseTimer();
+                    playGentleChime('timer');
+                    triggerSubtleConfetti();
+                    speakText('Tempo concluído! Faça uma pequena pausa ou respire fundo.');
+                    showToast('⏰ Tempo concluído! Ótimo trabalho.', 'success');
+                    document.getElementById('timer-subtext').textContent = 'Concluído!';
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            isTimerRunning = false;
+            clearInterval(timerInterval);
+            document.getElementById('timer-btn-label').textContent = 'Continuar';
+            document.getElementById('timer-subtext').textContent = 'Pausado';
+            document.getElementById('timer-play-icon').setAttribute('data-lucide', 'play');
+            lucide.createIcons();
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            timerRemainingSeconds = timerTotalSeconds;
+            document.getElementById('timer-btn-label').textContent = 'Iniciar';
+            document.getElementById('timer-subtext').textContent = 'Pronto para começar';
+            updateTimerVisuals();
+        }
+
+        function setTimerPreset(minutes, label) {
+            pauseTimer();
+            timerTotalSeconds = minutes * 60;
+            timerRemainingSeconds = timerTotalSeconds;
+            document.getElementById('timer-mode-badge').textContent = label;
+            document.getElementById('timer-btn-label').textContent = 'Iniciar';
+            document.getElementById('timer-subtext').textContent = `${minutes} min prontos`;
+            updateTimerVisuals();
+            playGentleChime('action');
+        }
+
+        // =========================================================================
+        // COMANDO DE VOZ (ATIVO DURANTE O TESTE GRATUITO DE 1 DIA)
+        // =========================================================================
+        let recognition = null;
+        let isListening = false;
+
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                document.getElementById('speech-fallback-banner').classList.remove('hidden');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'pt-BR';
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('mic-pulse').classList.remove('hidden');
+                document.getElementById('mic-btn').classList.replace('bg-indigo-600', 'bg-rose-500');
+                document.getElementById('voice-status-title').textContent = 'Ouvindo você... Pode falar!';
+                document.getElementById('voice-transcript').textContent = '...';
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                document.getElementById('voice-transcript').textContent =
+                    `"${finalTranscript || interimTranscript}"`;
+
+                if (finalTranscript) {
+                    processCommand(finalTranscript);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.warn('Erro voz:', event.error);
+                stopListeningUI();
+                if (event.error === 'not-allowed') {
+                    document.getElementById('speech-fallback-banner').classList.remove('hidden');
+                }
+            };
+
+            recognition.onend = () => {
+                stopListeningUI();
+            };
+        }
+
+        function stopListeningUI() {
+            isListening = false;
+            document.getElementById('mic-pulse').classList.add('hidden');
+            document.getElementById('mic-btn').classList.replace('bg-rose-500', 'bg-indigo-600');
+            document.getElementById('voice-status-title').textContent = 'Toque no microfone e fale naturalmente';
+        }
+
+        function toggleVoiceRecognition() {
+            if (!checkTrialStatus()) {
+                showPaywallModal();
+                return;
+            }
+
+            if (!recognition) {
+                document.getElementById('speech-fallback-banner').classList.remove('hidden');
+                document.getElementById('quick-input').focus();
+                return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
+
+        function speakText(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.05;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function processCommand(rawText) {
+            const text = rawText.trim();
+            const lower = text.toLowerCase();
+
+            if (lower.includes('iniciar foco') || lower.includes('começar foco') || lower.includes('começar pomodoro')) {
+                startTimer();
+                speakText('Iniciando seu foco. Um passo de cada vez.');
+                showToast('⏱️ Timer iniciado!', 'success');
+                return;
+            }
+
+            if (lower.includes('pausar') || lower.includes('parar tempo')) {
+                pauseTimer();
+                speakText('Tempo pausado.');
+                showToast('⏸️ Timer pausado.', 'info');
+                return;
+            }
+
+            if (lower.includes('ler minhas tarefas') || lower.includes('quais são minhas tarefas')) {
+                const pending = appState.tasks.filter(t => !t.completed);
+                if (pending.length === 0) {
+                    speakText('Você não tem tarefas pendentes. Parabéns!');
+                    showToast('✨ Nenhuma tarefa pendente!', 'success');
+                } else {
+                    const listSpeech = pending.map((t, i) => `${i + 1}: ${t.title}`).join('. ');
+                    speakText(`Você tem ${pending.length} tarefas pendentes. ${listSpeech}`);
+                    showToast(`🔊 Lendo ${pending.length} tarefas...`, 'info');
+                }
+                return;
+            }
+
+            const breakPrefixes = ['quebrar tarefa ', 'dividir tarefa ', 'quebrar ', 'dividir '];
+            for (const prefix of breakPrefixes) {
+                if (lower.startsWith(prefix)) {
+                    const targetName = text.slice(prefix.length).trim();
+                    const existing = appState.tasks.find(t => !t.completed && t.title.toLowerCase().includes(targetName.toLowerCase()));
+                    if (existing) {
+                        breakDownTask(existing.id);
+                        speakText(`Dividi a tarefa ${existing.title} em passos.`);
+                    } else {
+                        addTask(targetName, true);
+                        speakText(`Adicionei e dividi ${targetName}.`);
+                    }
+                    return;
+                }
+            }
+
+            const completePrefixes = ['concluir tarefa ', 'concluir ', 'marcar ', 'finalizar '];
+            for (const prefix of completePrefixes) {
+                if (lower.startsWith(prefix)) {
+                    const targetName = text.slice(prefix.length).trim().toLowerCase();
+                    const existing = appState.tasks.find(t => !t.completed && t.title.toLowerCase().includes(targetName));
+                    if (existing) {
+                        toggleTaskComplete(existing.id);
+                        speakText(`Parabéns! Tarefa ${existing.title} concluída.`);
+                    } else {
+                        showToast(`Tarefa "${targetName}" não encontrada.`, 'warn');
+                    }
+                    return;
+                }
+            }
+
+            const addPrefixes = ['adicionar tarefa ', 'nova tarefa ', 'lembrar de ', 'adicionar ', 'criar tarefa '];
+            let taskTitle = text;
+            for (const prefix of addPrefixes) {
+                if (lower.startsWith(prefix)) {
+                    taskTitle = text.slice(prefix.length).trim();
+                    break;
+                }
+            }
+
+            if (taskTitle) {
+                addTask(taskTitle);
+                speakText(`Tarefa adicionada: ${taskTitle}`);
+            }
+        }
+
+        function handleTextCommand(e) {
+            e.preventDefault();
+            const input = document.getElementById('quick-input');
+            const val = input.value.trim();
+            if (!val) return;
+            document.getElementById('voice-transcript').textContent = `"${val}"`;
+            processCommand(val);
+            input.value = '';
+        }
+
+        function simulateVoiceCommand(commandText) {
+            document.getElementById('voice-transcript').textContent = `"${commandText}"`;
+            processCommand(commandText);
+        }
+
+        // =========================================================================
+        // TEMA & SOM
+        // =========================================================================
+        function toggleTheme() {
+            appState.darkMode = !appState.darkMode;
+            applyTheme();
+            saveState();
+        }
+
+        function applyTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('theme-icon');
+            if (appState.darkMode) {
+                html.classList.add('dark');
+                icon.setAttribute('data-lucide', 'sun');
+            } else {
+                html.classList.remove('dark');
+                icon.setAttribute('data-lucide', 'moon');
+            }
+            lucide.createIcons();
+        }
+
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            updateSoundIcon();
+            saveState();
+            if (appState.soundEnabled) playGentleChime('action');
+        }
+
+        function updateSoundIcon() {
+            const icon = document.getElementById('sound-icon');
+            icon.setAttribute('data-lucide', appState.soundEnabled ? 'volume-2' : 'volume-x');
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // RENDERIZAÇÃO DA INTERFACE
+        // =========================================================================
+        function renderAll() {
+            renderProgress();
+            renderNowFocus();
+            renderTasksList();
+            renderBrainDumps();
+            updateLicenseUI();
+            lucide.createIcons();
+        }
+
+        function updateLicenseUI() {
+            const badge = document.getElementById('trial-time-badge');
+            const btnText = document.getElementById('license-btn-text');
+
+            if (appState.license.isActivated) {
+                badge.textContent = 'Vitalício';
+                document.getElementById('license-badge-header').className = 'text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1';
+                btnText.textContent = 'Licença Ativa';
+            } else {
+                badge.textContent = getRemainingTrialTime();
+            }
+        }
+
+        function renderProgress() {
+            const total = appState.tasks.length;
+            const completed = appState.tasks.filter(t => t.completed).length;
+            const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+            document.getElementById('daily-progress-bar').style.width = `${pct}%`;
+            document.getElementById('daily-progress-text').textContent = `${pct}%`;
+        }
+
+        function renderNowFocus() {
+            const container = document.getElementById('now-focus-container');
+            const focusTask = appState.tasks.find(t => !t.completed && t.isFocus) || appState.tasks.find(t => !t.completed);
+
+            if (!focusTask) {
+                container.innerHTML = `
+                    <div class="py-6 text-center">
+                        <p class="text-base font-medium text-slate-700 dark:text-slate-200">Mente livre! Nenhuma tarefa pendente agora.</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Diga ou digite uma nova tarefa para começar.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const subtasksHtml = focusTask.subtasks.length > 0 ? `
+                <div class="mt-4 pt-3 border-t border-indigo-500/15 space-y-2">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Micro-passos para destravar:</p>
+                    ${focusTask.subtasks.map(sub => `
+                        <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/70 dark:bg-slate-950/50 cursor-pointer hover:bg-white dark:hover:bg-slate-950 transition border border-slate-200/50 dark:border-slate-800/50">
+                            <input type="checkbox" ${sub.completed ? 'checked' : ''} onchange="toggleSubtaskComplete('${focusTask.id}', '${sub.id}')" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-sm ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-200'}">${sub.title}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            ` : '';
+
+            container.innerHTML = `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="flex items-start gap-3.5">
+                        <button onclick="toggleTaskComplete('${focusTask.id}')" class="mt-1 w-7 h-7 rounded-full border-2 border-indigo-500 hover:bg-indigo-500/20 flex items-center justify-center text-indigo-500 transition shrink-0" title="Concluir">
+                            <i data-lucide="check" class="w-4 h-4 opacity-50 hover:opacity-100"></i>
+                        </button>
+                        <div>
+                            <h4 class="text-lg sm:text-xl font-bold text-slate-800 dark:text-white leading-snug">${focusTask.title}</h4>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Concentre-se exclusivamente nesta ação.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="breakDownTask('${focusTask.id}')" class="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-slate-800 text-xs font-medium flex items-center gap-1.5 transition shadow-xs">
+                            <i data-lucide="git-branch" class="w-3.5 h-3.5"></i>
+                            Dividir em passos
+                        </button>
+                    </div>
+                </div>
+                ${subtasksHtml}
+            `;
+        }
+
+        function renderTasksList() {
+            const listEl = document.getElementById('tasks-list');
+            const pendingTasks = appState.tasks.filter(t => !t.completed);
+            const completedTasks = appState.tasks.filter(t => t.completed);
+
+            document.getElementById('tasks-counter').textContent = `${pendingTasks.length} pendente${pendingTasks.length === 1 ? '' : 's'}`;
+
+            if (appState.tasks.length === 0) {
+                listEl.innerHTML = `<p class="text-sm text-slate-400 text-center py-6">Sua lista está vazia. Fale ou digite algo acima!</p>`;
+                return;
+            }
+
+            let html = '';
+
+            pendingTasks.forEach(task => {
+                const subCount = task.subtasks.length;
+                const subDone = task.subtasks.filter(s => s.completed).length;
+
+                html += `
+                    <div class="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/50 border ${task.isFocus ? 'border-indigo-500/40' : 'border-slate-200/80 dark:border-slate-800/80'} transition">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3 flex-1">
+                                <button onclick="toggleTaskComplete('${task.id}')" class="mt-0.5 w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-700 hover:border-emerald-500 flex items-center justify-center transition shrink-0"></button>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${task.title}</span>
+                                        ${task.isFocus ? '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500">Foco Atual</span>' : ''}
+                                        ${subCount > 0 ? `<span class="text-[11px] text-teal-600 dark:text-teal-400 font-medium">(${subDone}/${subCount} passos)</span>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1">
+                                ${!task.isFocus ? `
+                                    <button onclick="setAsFocus('${task.id}')" title="Trazer para Foco" class="p-1.5 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition">
+                                        <i data-lucide="target" class="w-4 h-4"></i>
+                                    </button>
+                                ` : ''}
+                                <button onclick="breakDownTask('${task.id}')" title="Dividir em passos" class="p-1.5 rounded-lg text-slate-400 hover:text-teal-500 hover:bg-teal-500/10 transition">
+                                    <i data-lucide="git-branch" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="deleteTask('${task.id}')" title="Excluir" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        ${subCount > 0 ? `
+                            <div class="mt-3 pl-9 space-y-1.5">
+                                ${task.subtasks.map(sub => `
+                                    <label class="flex items-center gap-2 text-xs cursor-pointer text-slate-600 dark:text-slate-300">
+                                        <input type="checkbox" ${sub.completed ? 'checked' : ''} onchange="toggleSubtaskComplete('${task.id}', '${sub.id}')" class="rounded text-teal-500 focus:ring-teal-500">
+                                        <span class="${sub.completed ? 'line-through opacity-50' : ''}">${sub.title}</span>
+                                    </label>
+                                `).join('')}
+                                <div class="flex gap-1.5 pt-1">
+                                    <input type="text" placeholder="+ Adicionar micro-passo..." onkeydown="if(event.key==='Enter'){addManualSubtask('${task.id}', this)}" class="text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex-1 focus:outline-none">
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            if (completedTasks.length > 0) {
+                html += `<div class="pt-3 mt-3 border-t border-slate-200 dark:border-slate-800">
+                    <p class="text-xs font-medium text-slate-400 mb-2">Concluídas hoje (${completedTasks.length})</p>
+                    <div class="space-y-1.5">
+                        ${completedTasks.map(task => `
+                            <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-500/5 text-slate-400 text-xs">
+                                <div class="flex items-center gap-2.5">
+                                    <button onclick="toggleTaskComplete('${task.id}')" class="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                                        <i data-lucide="check" class="w-3 h-3"></i>
+                                    </button>
+                                    <span class="line-through">${task.title}</span>
+                                </div>
+                                <button onclick="deleteTask('${task.id}')" class="hover:text-rose-400 p-1">
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            listEl.innerHTML = html;
+        }
+
+        function renderBrainDumps() {
+            const container = document.getElementById('brain-dump-list');
+            if (appState.brainDumps.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Nenhuma ideia estacionada.</p>`;
+                return;
+            }
+
+            container.innerHTML = appState.brainDumps.map(item => `
+                <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs">
+                    <span class="text-slate-700 dark:text-slate-200 flex-1">${item.text}</span>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="promoteBrainDumpToTask('${item.id}')" title="Virar tarefa" class="px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/25 font-medium transition">
+                            Virar Tarefa
+                        </button>
+                        <button onclick="deleteBrainDump('${item.id}')" title="Excluir" class="p-1 text-slate-400 hover:text-rose-500 transition">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // =========================================================================
+        // INICIALIZAÇÃO
+        // =========================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            initSpeechRecognition();
+            updateTimerVisuals();
+            renderAll();
+
+            // Atualiza o contador de tempo de teste a cada minuto
+            setInterval(() => {
+                updateLicenseUI();
+                checkTrialStatus();
+            }, 60000);
+        });
+    </script>
+</body>
+</html>
